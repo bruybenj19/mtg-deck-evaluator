@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MTG Commander Deck Evaluator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        .chart-container {
+            position: relative;
+            height: 300px;
+            width: 100%;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100">
+
+    <div class="container mx-auto p-4 md:p-8">
+        <header class="text-center mb-8">
+            <h1 class="text-4xl md:text-5xl font-bold text-white">MTG Commander Deck Evaluator</h1>
+            <p class="text-gray-400 mt-2">Paste your decklist to get an in-depth analysis and AI-powered suggestions.</p>
+        </header>
+
+        <main>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <!-- Input Section -->
+                <div class="bg-gray-800 p-6 rounded-lg shadow-lg">
+                    <h2 class="text-2xl font-semibold mb-4 text-white">Your Decklist</h2>
+                    
+                    <!-- Moxfield Import Section -->
+                    <div class="mb-4">
+                        <label for="moxfieldUrl" class="block text-sm font-medium text-gray-300 mb-1">Import from Moxfield URL</label>
+                        <div class="flex gap-2">
+                            <input type="text" id="moxfieldUrl" class="w-full bg-gray-700 text-gray-200 p-2 rounded-md border border-gray-600 focus:ring-2 focus:ring-green-500 focus:outline-none" placeholder="https://www.moxfield.com/decks/...">
+                            <button id="importBtn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition duration-300">
+                                Import
+                            </button>
+                        </div>
+                    </div>
+                    <!-- End Moxfield Import Section -->
+                    
+                    <textarea id="decklist" class="w-full h-80 bg-gray-700 text-gray-200 p-4 rounded-md border border-gray-600 focus:ring-2 focus:ring-blue-500 focus:outline-none" placeholder="Or paste your decklist here...&#10;1 Sol Ring&#10;1 Command Tower&#10;1 Arcane Signet&#10;...and so on.&#10;&#10;Please ensure your commander is at the top of the list!"></textarea>
+                    <button id="evaluateBtn" class="mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300 ease-in-out transform hover:scale-105">
+                        Evaluate My Deck
+                    </button>
+                </div>
+
+                <!-- Analysis Output Section -->
+                <div id="analysis-output" class="bg-gray-800 p-6 rounded-lg shadow-lg hidden">
+                     <div id="loading" class="text-center hidden">
+                        <svg class="animate-spin h-8 w-8 text-white mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0_0_24_24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <p class="mt-2 text-lg">Analyzing your deck...</p>
+                    </div>
+                    <div id="results" class="hidden">
+                        <h2 class="text-2xl font-semibold mb-4 text-white border-b border-gray-700 pb-2">Deck Analysis</h2>
+                        
+                        <!-- Commander Display -->
+                        <div id="commander-section" class="mb-6 text-center"></div>
+
+                        <!-- Key Stats -->
+                        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6 text-center">
+                            <div class="bg-gray-700 p-3 rounded-lg">
+                                <p class="text-sm text-gray-400">Total Cards</p>
+                                <p id="total-cards" class="text-xl font-bold"></p>
+                            </div>
+                            <div class="bg-gray-700 p-3 rounded-lg">
+                                <p class="text-sm text-gray-400">Avg. Mana Cost</p>
+                                <p id="avg-cmc" class="text-xl font-bold"></p>
+                            </div>
+                            <div class="bg-gray-700 p-3 rounded-lg">
+                                <p class="text-sm text-gray-400">Lands</p>
+                                <p id="land-count" class="text-xl font-bold"></p>
+                            </div>
+                             <div class="bg-gray-700 p-3 rounded-lg">
+                                <p class="text-sm text-gray-400">Creatures</p>
+                                <p id="creature-count" class="text-xl font-bold"></p>
+                            </div>
+                        </div>
+
+                        <!-- Mana Curve Chart -->
+                        <div class="mb-6">
+                            <h3 class="text-xl font-semibold mb-2">Mana Curve</h3>
+                            <div class="chart-container bg-gray-700 p-4 rounded-lg">
+                                <canvas id="manaCurveChart"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- Card Types Chart -->
+                        <div class="mb-6">
+                            <h3 class="text-xl font-semibold mb-2">Card Type Distribution</h3>
+                            <div class="chart-container bg-gray-700 p-4 rounded-lg flex justify-center items-center" style="height: 320px;">
+                                 <canvas id="cardTypesChart"></canvas>
+                            </div>
+                        </div>
+                        
+                        <!-- Color Identity -->
+                        <div class="mb-6">
+                            <h3 class="text-xl font-semibold mb-2">Color Identity Breakdown</h3>
+                             <div id="color-identity" class="flex justify-center space-x-4 p-4 bg-gray-700 rounded-lg">
+                                <!-- Color symbols will be injected here -->
+                            </div>
+                        </div>
+                        
+                        <!-- Recommendations -->
+                        <div class="mb-6">
+                            <h3 class="text-xl font-semibold mb-2">Recommendations</h3>
+                            <ul id="recommendations" class="list-disc list-inside space-y-2 text-gray-300">
+                                <!-- Recommendations will be populated here -->
+                            </ul>
+                        </div>
+                        
+                        <!-- Gemini Features -->
+                        <div id="gemini-features" class="mt-8 pt-6 border-t border-gray-700">
+                             <h2 class="text-2xl font-semibold mb-4 text-center text-white">✨ AI-Powered Insights ✨</h2>
+                             <div class="flex flex-col sm:flex-row gap-4">
+                                <button id="strategyBtn" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300">Analyze Strategy</button>
+                                <button id="swapsBtn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg transition duration-300">Suggest Swaps</button>
+                             </div>
+
+                             <div id="gemini-loading" class="text-center hidden mt-4">
+                                <svg class="animate-spin h-6 w-6 text-white mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0_0_24_24">
+                                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                <p class="mt-2 text-sm">Gemini is thinking...</p>
+                             </div>
+                             
+                             <div id="gemini-results" class="mt-4 space-y-4">
+                                <div id="strategy-result" class="bg-gray-700/50 p-4 rounded-lg hidden prose prose-invert max-w-none"></div>
+                                <div id="swaps-result" class="bg-gray-700/50 p-4 rounded-lg hidden prose prose-invert max-w-none"></div>
+                             </div>
+                        </div>
+                    </div>
+                     <div id="error" class="text-center text-red-400 hidden p-4 bg-red-900/50 rounded-lg">
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const evaluateBtn = document.getElementById('evaluateBtn');
+        const decklistEl = document.getElementById('decklist');
+        const analysisOutputEl = document.getElementById('analysis-output');
+        const loadingEl = document.getElementById('loading');
+        const resultsEl = document.getElementById('results');
+        const errorEl = document.getElementById('error');
+        
+        const strategyBtn = document.getElementById('strategyBtn');
+        const swapsBtn = document.getElementById('swapsBtn');
+        const geminiLoadingEl = document.getElementById('gemini-loading');
+        const strategyResultEl = document.getElementById('strategy-result');
+        const swapsResultEl = document.getElementById('swaps-result');
+        
+        const moxfieldUrlEl = document.getElementById('moxfieldUrl');
+        const importBtn = document.getElementById('importBtn');
+        
+        let manaCurveChartInstance = null;
+        let cardTypesChartInstance = null;
+        let currentDeckAnalysis = null;
+        let currentDeckList = "";
+        
+        importBtn.addEventListener('click', handleMoxfieldImport);
+
+        async function handleMoxfieldImport() {
+            const url = moxfieldUrlEl.value.trim();
+            if (!url) {
+                showError("Please enter a Moxfield URL.");
+                return;
+            }
+
+            const match = url.match(/moxfield\.com\/decks\/([a-zA-Z0-9_-]+)/);
+            if (!match || !match[1]) {
+                showError("Invalid Moxfield deck URL format.");
+                return;
+            }
+
+            const deckId = match[1];
+            const apiUrl = `https://corsproxy.io/?https://api.moxfield.com/v2/decks/all/${deckId}`;
+
+            importBtn.disabled = true;
+            importBtn.textContent = 'Importing...';
+            errorEl.classList.add('hidden');
+
+            try {
+                const response = await fetch(apiUrl);
+                if (!response.ok) {
+                    throw new Error(`Moxfield API request failed. Check if the URL is correct and the deck is public.`);
+                }
+                const data = await response.json();
+
+                if (!data.mainboard || !data.commanders) {
+                    throw new Error("Could not find deck data in the Moxfield response.");
+                }
+
+                let deckString = "";
+                Object.values(data.commanders).forEach(commander => {
+                    deckString += `${commander.quantity} ${commander.card.name}\n`;
+                });
+                
+                Object.values(data.mainboard).forEach(item => {
+                    deckString += `${item.quantity} ${item.card.name}\n`;
+                });
+                
+                decklistEl.value = deckString.trim();
+                moxfieldUrlEl.value = '';
+
+            } catch (error) {
+                console.error("Moxfield import error:", error);
+                showError(error.message);
+            } finally {
+                importBtn.disabled = false;
+                importBtn.textContent = 'Import';
+            }
+        }
+
+
+        evaluateBtn.addEventListener('click', async () => {
+            const decklist = decklistEl.value.trim();
+            if (!decklist) {
+                showError("Please paste your decklist before evaluating.");
+                return;
+            }
+            
+            currentDeckList = decklist;
+            
+            resultsEl.classList.add('hidden');
+            errorEl.classList.add('hidden');
+            strategyResultEl.classList.add('hidden');
+            swapsResultEl.classList.add('hidden');
+            analysisOutputEl.classList.remove('hidden');
+            loadingEl.classList.remove('hidden');
+
+            const cardNames = decklist.split('\n')
+                .map(line => line.trim())
+                .filter(line => line)
+                .map(line => {
+                    const match = line.match(/^(?:(\d+)\s*x?\s*)?(.*)/);
+                    if (match) {
+                        return match[2].split('(')[0].trim();
+                    }
+                    return null;
+                }).filter(name => name);
+            
+            if (cardNames.length === 0) {
+                showError("Could not parse any card names. Please check your decklist format.");
+                return;
+            }
+
+            try {
+                const cardData = await fetchCardData(cardNames);
+                if (cardData && cardData.data) {
+                    analyzeDeck(cardData.data, cardNames);
+                    resultsEl.classList.remove('hidden');
+                } else {
+                   showError("Could not fetch card data. The Scryfall API might be down or some card names are incorrect.");
+                }
+            } catch (error) {
+                 console.error("Error fetching or analyzing deck:", error);
+                 showError("An error occurred. Please check the console for details and ensure all card names are correct.");
+            } finally {
+                loadingEl.classList.add('hidden');
+            }
+        });
+
+        async function fetchCardData(cardNames) {
+            const identifiers = cardNames.map(name => ({ name }));
+            const response = await fetch('https://api.scryfall.com/cards/collection', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ identifiers })
+            });
+            if (!response.ok) {
+                const errorData = await response.json();
+                console.error("Scryfall API Error:", errorData);
+                let errorMessage = `API request failed with status ${response.status}.`;
+                if(errorData.not_found && errorData.not_found.length > 0) {
+                    const notFoundList = errorData.not_found.map(c => c.name).join(', ');
+                    errorMessage += ` Could not find the following cards: ${notFoundList}. Please check spelling.`
+                }
+                showError(errorMessage);
+                return null;
+            }
+            return response.json();
+        }
+
+        function analyzeDeck(cards, cardNames) {
+            let totalCards = 0;
+            let landCount = 0;
+            let creatureCount = 0;
+            let totalCMC = 0;
+            let cardTypes = {};
+            let manaCurve = {0:0, 1:0, 2:0, 3:0, 4:0, 5:0, 6:0, 7:0, '8+':0};
+            
+            const commanderSection = document.getElementById('commander-section');
+            const cardMap = new Map(cards.map(c => [c.name, c]));
+            
+            const commanderName = cardNames[0];
+            const commander = cardMap.get(commanderName);
+            
+            if (!commander) {
+                showError(`Could not find your commander (${commanderName}) in the data from Scryfall. Please ensure it's at the top of the list and spelled correctly.`);
+                resultsEl.classList.add('hidden');
+                return;
+            }
+
+            commanderSection.innerHTML = commander?.image_uris ? `
+                <h3 class="text-xl font-semibold mb-2">Your Commander</h3>
+                <img src="${commander.image_uris.normal}" alt="${commander.name}" class="rounded-lg mx-auto shadow-lg" style="width: 200px;">
+            ` : `<h3 class="text-xl font-semibold mb-2">Commander: ${commander ? commander.name : 'Unknown'}</h3>`;
+            
+            const deckListQuantities = decklistEl.value.trim().split('\n').reduce((acc, line) => {
+                const match = line.match(/^(?:(\d+)\s*x?\s*)?(.*)/);
+                if(match){
+                    const name = match[2].split('(')[0].trim();
+                    const count = parseInt(match[1] || '1', 10);
+                    acc[name] = count;
+                }
+                return acc;
+            }, {});
+
+            Object.entries(deckListQuantities).forEach(([name, count]) => {
+                const card = cardMap.get(name);
+                if (!card) return;
+
+                totalCards += count;
+
+                for (let i = 0; i < count; i++) {
+                    const type_line = card.type_line.split('//')[0].trim();
+                    let primaryType = type_line.split('—')[0].trim();
+
+                    if (primaryType.includes('Land')) {
+                        landCount++;
+                        primaryType = 'Land';
+                    } else {
+                         totalCMC += card.cmc;
+                         const cmc = card.cmc;
+                         if (cmc >= 8) manaCurve['8+']++;
+                         else if (manaCurve[cmc] !== undefined) manaCurve[cmc]++;
+                    }
+                    
+                    if (primaryType.includes('Creature')) creatureCount++;
+                    cardTypes[primaryType] = (cardTypes[primaryType] || 0) + 1;
+                }
+            });
+
+            const nonLandCards = totalCards - landCount;
+            const avgCmc = nonLandCards > 0 ? (totalCMC / nonLandCards).toFixed(2) : 0;
+            
+            document.getElementById('total-cards').textContent = totalCards;
+            document.getElementById('avg-cmc').textContent = avgCmc;
+            document.getElementById('land-count').textContent = landCount;
+            document.getElementById('creature-count').textContent = creatureCount;
+            
+            currentDeckAnalysis = { landCount, totalCards, avgCmc, cardTypes, commanderName: commander.name };
+            
+            displayManaCurve(manaCurve);
+            displayCardTypes(cardTypes);
+            displayColorIdentity(commander.color_identity);
+            generateRecommendations(currentDeckAnalysis);
+        }
+        
+        function displayManaCurve(manaCurve) {
+            const ctx = document.getElementById('manaCurveChart').getContext('2d');
+            const labels = Object.keys(manaCurve);
+            const data = Object.values(manaCurve);
+
+            if(manaCurveChartInstance) {
+                manaCurveChartInstance.destroy();
+            }
+
+            manaCurveChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Number of Spells',
+                        data: data,
+                        backgroundColor: 'rgba(59, 130, 246, 0.5)',
+                        borderColor: 'rgba(59, 130, 246, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { 
+                                color: '#d1d5db',
+                                stepSize: 1
+                            },
+                             grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                        },
+                        x: {
+                            ticks: { color: '#d1d5db' },
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: '#1f2937',
+                            titleColor: '#e5e7eb',
+                            bodyColor: '#d1d5db'
+                        }
+                    },
+                    responsive: true,
+                    maintainAspectRatio: false
+                }
+            });
+        }
+
+        function displayCardTypes(cardTypes) {
+             const ctx = document.getElementById('cardTypesChart').getContext('2d');
+             const labels = Object.keys(cardTypes);
+             const data = Object.values(cardTypes);
+             const backgroundColors = [
+                '#3b82f6', '#10b981', '#ef4444', '#f97316', '#8b5cf6', 
+                '#ec4899', '#6b7280', '#eab308', '#22c55e', '#06b6d4'
+             ];
+
+            if(cardTypesChartInstance) {
+                cardTypesChartInstance.destroy();
+            }
+
+            cardTypesChartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: backgroundColors,
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                     responsive: true,
+                     maintainAspectRatio: false,
+                     plugins: {
+                        legend: {
+                            position: 'bottom',
+                             labels: { color: '#d1d5db' }
+                        },
+                         tooltip: {
+                            backgroundColor: '#1f2937',
+                            titleColor: '#e5e7eb',
+                            bodyColor: '#d1d5db'
+                        }
+                     }
+                }
+            });
+        }
+        
+        function displayColorIdentity(colors) {
+            const container = document.getElementById('color-identity');
+            container.innerHTML = '';
+            const colorMap = {
+                'W': 'White', 'U': 'Blue', 'B': 'Black', 'R': 'Red', 'G': 'Green'
+            };
+            
+            if (colors.length === 0) {
+                 container.innerHTML = `<p class="text-gray-400">Colorless</p>`;
+                 return;
+            }
+
+            colors.forEach(color => {
+                const img = document.createElement('img');
+                img.src = `https://svgs.scryfall.io/card-symbols/${color}.svg`;
+                img.alt = colorMap[color];
+                img.title = colorMap[color];
+                img.className = 'w-8 h-8';
+                container.appendChild(img);
+            });
+        }
+        
+        function generateRecommendations(stats) {
+            const { landCount, totalCards, avgCmc, cardTypes } = stats;
+            const recommendationsEl = document.getElementById('recommendations');
+            recommendationsEl.innerHTML = '';
+            let recommendations = [];
+            
+            if (totalCards !== 100) {
+                 recommendations.push(`Your deck has ${totalCards} cards. Commander decks must contain exactly 100 cards.`);
+            }
+            if (landCount < 35) {
+                recommendations.push(`Your land count of ${landCount} is quite low. Most Commander decks run between 35-40 lands. Consider adding more to ensure consistent mana.`);
+            } else if (landCount > 42) {
+                 recommendations.push(`Your land count of ${landCount} is a bit high. You might be able to cut a few lands for more spells without hurting your consistency.`);
+            }
+
+            const rampCount = (cardTypes['Artifact'] || 0) + (cardTypes['Enchantment'] || 0) + (cardTypes['Creature'] || 0);
+            if (avgCmc > 3.0 && rampCount < 10) {
+                 recommendations.push(`With an average mana cost of ${avgCmc}, you might want more ramp. Look for mana rocks or creatures that produce mana. Aim for 10-12 ramp sources.`);
+            }
+            
+            const drawSources = (cardTypes['Instant'] || 0) + (cardTypes['Sorcery'] || 0) + (cardTypes['Creature'] || 0) + (cardTypes['Enchantment'] || 0);
+            if (drawSources < 10) {
+                recommendations.push("Your deck might be light on card draw. Consistent card draw is key. Aim for around 10+ sources of card advantage.");
+            }
+            
+             const interaction = (cardTypes['Instant'] || 0) + (cardTypes['Sorcery'] || 0);
+             if(interaction < 8) {
+                  recommendations.push("Consider adding more interaction (removal, counterspells, board wipes). Aim for 8-12 pieces.");
+             }
+             
+            if (recommendations.length === 0) {
+                recommendationsEl.innerHTML = '<li>Your deck looks well-balanced based on these general metrics. Good job!</li>';
+            } else {
+                recommendations.forEach(rec => {
+                    const li = document.createElement('li');
+                    li.textContent = rec;
+                    recommendationsEl.appendChild(li);
+                });
+            }
+        }
+        
+        async function callGemini(prompt) {
+            geminiLoadingEl.classList.remove('hidden');
+            let resultText = "Sorry, something went wrong while contacting the AI. Please try again.";
+            
+            try {
+                const apiKey = "";
+                const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+                
+                const payload = {
+                    contents: [{ parts: [{ text: prompt }] }],
+                };
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`API call failed with status: ${response.status}`);
+                }
+
+                const result = await response.json();
+                const candidate = result.candidates?.[0];
+
+                if (candidate && candidate.content?.parts?.[0]?.text) {
+                    resultText = candidate.content.parts[0].text;
+                } else {
+                    resultText = "Received an empty or invalid response from the AI."
+                }
+            } catch (error) {
+                console.error("Gemini API Error:", error);
+                resultText = `Error: ${error.message}. Check the console for more details.`;
+            } finally {
+                geminiLoadingEl.classList.add('hidden');
+            }
+            return resultText.replace(/\n/g, '<br>');
+        }
+
+        strategyBtn.addEventListener('click', async () => {
+            if (!currentDeckAnalysis) return;
+            strategyResultEl.classList.add('hidden');
+            const prompt = `You are an expert MTG Commander player. Analyze the following Commander decklist and provide a summary of its primary strategy, key synergies, and common win conditions. Be concise and clear. Commander: ${currentDeckAnalysis.commanderName}. Decklist:\n${currentDeckList}`;
+            const result = await callGemini(prompt);
+            strategyResultEl.innerHTML = `<h3>Strategy Analysis</h3>${result}`;
+            strategyResultEl.classList.remove('hidden');
+        });
+        
+        swapsBtn.addEventListener('click', async () => {
+            if (!currentDeckAnalysis) return;
+            swapsResultEl.classList.add('hidden');
+            const recommendationsText = Array.from(document.getElementById('recommendations').querySelectorAll('li')).map(li => li.textContent).join('\n');
+            const prompt = `You are an expert MTG Commander deck builder. Based on the following decklist and analysis, suggest 3-5 specific card swaps to improve the deck. For each swap, suggest one card to REMOVE and one card to ADD, and provide a brief justification. Focus on budget-friendly options unless a staple is necessary. Commander: ${currentDeckAnalysis.commanderName}\nAnalysis/Recommendations:\n${recommendationsText}\nDecklist:\n${currentDeckList}`;
+            const result = await callGemini(prompt);
+            swapsResultEl.innerHTML = `<h3>Swap Suggestions</h3>${result}`;
+            swapsResultEl.classList.remove('hidden');
+        });
+
+        function showError(message) {
+            errorEl.textContent = message;
+            errorEl.classList.remove('hidden');
+            loadingEl.classList.add('hidden');
+            resultsEl.classList.add('hidden');
+        }
+
+    </script>
+</body>
+</html>
+
